@@ -13,3 +13,14 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Vendor repos (re-clone via vcs)
+src/f1tenth_gym/
+src/f1tenth_gym_ros/
+# Vendor repos (re-clone via vcs)
+src/f1tenth_gym/
+src/f1tenth_gym_ros/
+
+# Vendor repos (re-clone via vcs)
+src/f1tenth_gym/
+src/f1tenth_gym_ros/
