@@ -19,14 +19,16 @@ class WaypointRecorder(Node):
         super().__init__('record_waypoints')
 
         self.declare_parameter('odom_topic', '/ego_racecar/odom')
-        self.declare_parameter('out_csv', '/home/team2/f1tenth_team_ws/src/team_planning/waypoints/spielberg_recorded.csv')
+        self.declare_parameter('out_csv', 'recorded_waypoints.csv')
         self.declare_parameter('min_dist', 0.25)  # meters between saved points
 
         self.odom_topic = self.get_parameter('odom_topic').value
         self.out_csv = self.get_parameter('out_csv').value
         self.min_dist = float(self.get_parameter('min_dist').value)
 
-        os.makedirs(os.path.dirname(self.out_csv), exist_ok=True)
+        out_dir = os.path.dirname(self.out_csv)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
 
         self.last_x: Optional[float] = None
         self.last_y: Optional[float] = None

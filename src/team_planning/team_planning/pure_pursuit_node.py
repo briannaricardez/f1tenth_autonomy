@@ -53,6 +53,10 @@ class PurePursuit(Node):
         self.last_nearest_i = 0
 
     def load_waypoints(self, path: str) -> List[Tuple[float, float]]:
+        import os
+        if not os.path.isfile(path):
+            self.get_logger().error(f"Waypoints file not found: {path}")
+            raise FileNotFoundError(f"Waypoints file not found: {path}")
         pts = []
         with open(path, 'r') as f:
             reader = csv.reader(line for line in f if line.strip() and not line.strip().startswith('#'))

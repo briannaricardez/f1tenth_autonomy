@@ -3,9 +3,9 @@
 <package format="3">
   <name>team_control</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Vehicle control nodes for F1Tenth including keyboard teleop and drive multiplexer</description>
   <maintainer email="brianna_ricardez@ucsb.edu">team2</maintainer>
-  <license>TODO: License declaration</license>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>ackermann_msgs</depend>
