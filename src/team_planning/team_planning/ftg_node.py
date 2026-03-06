@@ -19,7 +19,7 @@ class FollowTheGap(Node):
 
         # Topics
         self.declare_parameter('scan_topic', '/scan')
-        self.declare_parameter('drive_topic', '/drive')
+        self.declare_parameter('drive_topic', '/drive_ftg')
 
         # FTG parameters (safe defaults for your sim)
         self.declare_parameter('max_speed', 1.8)

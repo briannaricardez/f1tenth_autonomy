@@ -1,120 +1,144 @@
 #!/usr/bin/env python3
-import math
+
 import csv
-import os
-from typing import Optional
+import math
+from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 
-from tf2_ros import Buffer, TransformListener, LookupException, \
-    ConnectivityException, ExtrapolationException
 
-
-class WaypointRecorder(Node):
-    """
-    Records (x,y) waypoints while you drive with keyboard.
-    - Writes a point every 'min_dist' meters.
-    - Saves to CSV when you Ctrl+C the node.
-    - With use_slam_pose=True, records in the map frame (SLAM-corrected).
-    - With use_slam_pose=False, records from raw odometry.
-    """
+class RecordWaypoints(Node):
     def __init__(self):
         super().__init__('record_waypoints')
 
         self.declare_parameter('odom_topic', '/ego_racecar/odom')
-        self.declare_parameter('out_csv', 'recorded_waypoints.csv')
-        self.declare_parameter('min_dist', 0.25)
+        self.declare_parameter('out_csv', '/tmp/waypoints.csv')
+        self.declare_parameter('min_dist', 0.20)
+        self.declare_parameter('auto_stop_on_loop', True)
+        self.declare_parameter('closure_radius', 0.60)
+        self.declare_parameter('min_lap_distance', 20.0)
 
-        # SLAM pose parameters
-        self.declare_parameter('use_slam_pose', False)
-        self.declare_parameter('map_frame', 'map')
-        self.declare_parameter('base_frame', 'ego_racecar/base_link')
+        self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
+        self.out_csv = self.get_parameter('out_csv').get_parameter_value().string_value
+        self.min_dist = self.get_parameter('min_dist').get_parameter_value().double_value
+        self.auto_stop_on_loop = self.get_parameter('auto_stop_on_loop').get_parameter_value().bool_value
+        self.closure_radius = self.get_parameter('closure_radius').get_parameter_value().double_value
+        self.min_lap_distance = self.get_parameter('min_lap_distance').get_parameter_value().double_value
 
-        self.out_csv = self.get_parameter('out_csv').value
-        self.min_dist = float(self.get_parameter('min_dist').value)
-        self.use_slam_pose = self.get_parameter('use_slam_pose').value
-        self.map_frame = self.get_parameter('map_frame').value
-        self.base_frame = self.get_parameter('base_frame').value
-
-        out_dir = os.path.dirname(self.out_csv)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-
-        self.last_x: Optional[float] = None
-        self.last_y: Optional[float] = None
         self.points = []
+        self.start_point = None
+        self.last_point = None
+        self.total_distance = 0.0
+        self.saved = False
+        self.shutdown_requested = False
 
-        if self.use_slam_pose:
-            self.tf_buffer = Buffer()
-            self.tf_listener = TransformListener(self.tf_buffer, self)
-            self.timer = self.create_timer(0.1, self.tf_cb)
-            self.get_logger().info(
-                f"Recording waypoints from TF: {self.map_frame} -> {self.base_frame}")
-        else:
-            odom_topic = self.get_parameter('odom_topic').value
-            self.sub = self.create_subscription(Odometry, odom_topic, self.odom_cb, 10)
-            self.get_logger().info(f"Recording waypoints from {odom_topic}")
-
-        self.get_logger().info(f"Output CSV: {self.out_csv}")
-        self.get_logger().info("Drive a full lap, then press Ctrl+C here to save.")
-
-    def tf_cb(self):
-        """Get pose from SLAM TF and record."""
-        try:
-            t = self.tf_buffer.lookup_transform(
-                self.map_frame, self.base_frame,
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.1),
-            )
-        except (LookupException, ConnectivityException, ExtrapolationException):
-            return
-
-        self.record_point(t.transform.translation.x, t.transform.translation.y)
-
-    def odom_cb(self, msg: Odometry):
-        """Get pose from odometry and record."""
-        self.record_point(
-            float(msg.pose.pose.position.x),
-            float(msg.pose.pose.position.y),
+        self.sub = self.create_subscription(
+            Odometry,
+            self.odom_topic,
+            self.odom_callback,
+            10,
         )
 
-    def record_point(self, x: float, y: float):
-        if self.last_x is None:
-            self.last_x, self.last_y = x, y
-            self.points.append((x, y))
+        self.get_logger().info(f'Recording waypoints from {self.odom_topic}')
+        self.get_logger().info(f'Output CSV: {self.out_csv}')
+        if self.auto_stop_on_loop:
+            self.get_logger().info(
+                'Auto-stop enabled. Recorder will save when the car returns near the start '
+                f'(closure_radius={self.closure_radius:.2f} m, '
+                f'min_lap_distance={self.min_lap_distance:.2f} m).'
+            )
+        else:
+            self.get_logger().info('Drive a full lap, then press Ctrl+C here to save.')
+
+    @staticmethod
+    def dist(a, b):
+        return math.hypot(a[0] - b[0], a[1] - b[1])
+
+    def save_csv(self):
+        if self.saved:
             return
 
-        d = math.hypot(x - self.last_x, y - self.last_y)
-        if d >= self.min_dist:
-            self.points.append((x, y))
-            self.last_x, self.last_y = x, y
+        out_path = Path(self.out_csv)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def save(self):
-        if len(self.points) < 5:
-            self.get_logger().warn("Not enough points recorded, not saving.")
-            return
-
-        with open(self.out_csv, 'w', newline='') as f:
-            w = csv.writer(f)
-            w.writerow(["# x", "y"])
+        with out_path.open('w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['# x', 'y'])
             for x, y in self.points:
-                w.writerow([f"{x:.6f}", f"{y:.6f}"])
+                writer.writerow([f'{x:.6f}', f'{y:.6f}'])
 
-        self.get_logger().info(f"Saved {len(self.points)} waypoints to {self.out_csv}")
+        self.saved = True
+        self.get_logger().info(f'Saved {len(self.points)} waypoints to {self.out_csv}')
+
+    def maybe_finish_loop(self, current_point):
+        if not self.auto_stop_on_loop:
+            return
+
+        if self.start_point is None or len(self.points) < 10:
+            return
+
+        closure_dist = self.dist(current_point, self.start_point)
+
+        if self.total_distance >= self.min_lap_distance and closure_dist <= self.closure_radius:
+            self.get_logger().info(
+                f'Loop closure detected: current point is {closure_dist:.3f} m from start '
+                f'after {self.total_distance:.3f} m of travel.'
+            )
+            self.save_csv()
+            self.shutdown_requested = True
+
+    def odom_callback(self, msg: Odometry):
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        current_point = (x, y)
+
+        if self.start_point is None:
+            self.start_point = current_point
+            self.last_point = current_point
+            self.points.append(current_point)
+            self.get_logger().info(
+                f'Start point recorded at x={x:.3f}, y={y:.3f}'
+            )
+            return
+
+        step_dist = self.dist(current_point, self.last_point)
+
+        if step_dist < self.min_dist:
+            self.maybe_finish_loop(current_point)
+            return
+
+        self.total_distance += step_dist
+        self.points.append(current_point)
+        self.last_point = current_point
+
+        if len(self.points) % 50 == 0:
+            closure_dist = self.dist(current_point, self.start_point)
+            self.get_logger().info(
+                f'Recorded {len(self.points)} points | '
+                f'path_length={self.total_distance:.2f} m | '
+                f'dist_to_start={closure_dist:.2f} m'
+            )
+
+        self.maybe_finish_loop(current_point)
 
 
-def main():
-    rclpy.init()
-    node = WaypointRecorder()
+def main(args=None):
+    rclpy.init(args=args)
+    node = RecordWaypoints()
+
     try:
-        rclpy.spin(node)
+        while rclpy.ok() and not node.shutdown_requested:
+            rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
-        pass
-    node.save()
-    node.destroy_node()
-    rclpy.shutdown()
+        node.get_logger().info('Keyboard interrupt received. Saving recorded waypoints...')
+    finally:
+        if len(node.points) > 0 and not node.saved:
+            node.save_csv()
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

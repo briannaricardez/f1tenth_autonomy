@@ -21,6 +21,7 @@ setup(
         'console_scripts': [
             'keyboard_teleop = team_control.keyboard_teleop:main',
             'drive_mux = team_control.drive_mux:main',
+            'safety_supervisor = team_control.safety_supervisor:main',
         ],
     },
 )
