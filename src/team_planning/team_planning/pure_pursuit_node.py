@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import math
 import csv
+import os
 from typing import List, Tuple
 
 import rclpy
@@ -8,13 +9,15 @@ from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
 
+from tf2_ros import Buffer, TransformListener, LookupException, \
+    ConnectivityException, ExtrapolationException
+
 
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
 def yaw_from_quat(q) -> float:
-    # geometry_msgs/Quaternion
     siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
     cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
     return math.atan2(siny_cosp, cosy_cosp)
@@ -27,17 +30,24 @@ class PurePursuit(Node):
         self.declare_parameter('odom_topic', '/ego_racecar/odom')
         self.declare_parameter('drive_topic', '/drive_pp')
         self.declare_parameter('waypoints_csv', '')
-        self.declare_parameter('lookahead', 1.2)          # meters
-        self.declare_parameter('wheelbase', 0.33)         # meters (approx F1TENTH)
-        self.declare_parameter('steer_limit', 0.4189)     # rad
-        self.declare_parameter('speed', 1.5)              # m/s
+        self.declare_parameter('lookahead', 1.2)
+        self.declare_parameter('wheelbase', 0.33)
+        self.declare_parameter('steer_limit', 0.4189)
+        self.declare_parameter('speed', 1.5)
 
-        self.odom_topic = self.get_parameter('odom_topic').value
+        # SLAM pose parameters
+        self.declare_parameter('use_slam_pose', False)
+        self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('base_frame', 'ego_racecar/base_link')
+
         self.drive_topic = self.get_parameter('drive_topic').value
         self.lookahead = float(self.get_parameter('lookahead').value)
         self.wheelbase = float(self.get_parameter('wheelbase').value)
         self.steer_limit = float(self.get_parameter('steer_limit').value)
         self.speed = float(self.get_parameter('speed').value)
+        self.use_slam_pose = self.get_parameter('use_slam_pose').value
+        self.map_frame = self.get_parameter('map_frame').value
+        self.base_frame = self.get_parameter('base_frame').value
 
         wp_path = self.get_parameter('waypoints_csv').value
         if not wp_path:
@@ -48,12 +58,20 @@ class PurePursuit(Node):
         self.get_logger().info(f"Loaded {len(self.waypoints)} waypoints from {wp_path}")
 
         self.pub = self.create_publisher(AckermannDriveStamped, self.drive_topic, 10)
-        self.sub = self.create_subscription(Odometry, self.odom_topic, self.odom_cb, 10)
-
         self.last_nearest_i = 0
 
+        if self.use_slam_pose:
+            self.tf_buffer = Buffer()
+            self.tf_listener = TransformListener(self.tf_buffer, self)
+            self.timer = self.create_timer(1.0 / 30.0, self.control_loop)
+            self.get_logger().info(
+                f"Using SLAM pose: TF lookup {self.map_frame} -> {self.base_frame}")
+        else:
+            odom_topic = self.get_parameter('odom_topic').value
+            self.sub = self.create_subscription(Odometry, odom_topic, self.odom_cb, 10)
+            self.get_logger().info(f"Using odometry pose from {odom_topic}")
+
     def load_waypoints(self, path: str) -> List[Tuple[float, float]]:
-        import os
         if not os.path.isfile(path):
             self.get_logger().error(f"Waypoints file not found: {path}")
             raise FileNotFoundError(f"Waypoints file not found: {path}")
@@ -68,14 +86,34 @@ class PurePursuit(Node):
             raise RuntimeError("Waypoint file must contain at least 2 points")
         return pts
 
+    def control_loop(self):
+        """Get pose from SLAM TF and run pursuit."""
+        try:
+            t = self.tf_buffer.lookup_transform(
+                self.map_frame, self.base_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.1),
+            )
+        except (LookupException, ConnectivityException, ExtrapolationException) as e:
+            self.get_logger().warn(f'TF lookup failed: {e}', throttle_duration_sec=2.0)
+            return
+
+        x = t.transform.translation.x
+        y = t.transform.translation.y
+        yaw = yaw_from_quat(t.transform.rotation)
+        self.pursue(x, y, yaw)
+
     def odom_cb(self, msg: Odometry):
+        """Get pose from odometry and run pursuit."""
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         yaw = yaw_from_quat(msg.pose.pose.orientation)
+        self.pursue(x, y, yaw)
 
+    def pursue(self, x: float, y: float, yaw: float):
         # Find nearest waypoint (search a window forward for speed)
         n = len(self.waypoints)
-        search = 200  # max points to scan forward
+        search = 200
         best_i = self.last_nearest_i
         best_d2 = float('inf')
 
@@ -98,7 +136,7 @@ class PurePursuit(Node):
             x2, y2 = self.waypoints[nxt]
             accum += math.hypot(x2 - x1, y2 - y1)
             target_i = nxt
-            if accum > 50.0:  # safety break
+            if accum > 50.0:
                 break
 
         tx, ty = self.waypoints[target_i]
@@ -106,8 +144,6 @@ class PurePursuit(Node):
         # Transform target point into vehicle frame
         dx = tx - x
         dy = ty - y
-
-        # rotate by -yaw
         x_v = math.cos(-yaw) * dx - math.sin(-yaw) * dy
         y_v = math.sin(-yaw) * dx + math.cos(-yaw) * dy
 
