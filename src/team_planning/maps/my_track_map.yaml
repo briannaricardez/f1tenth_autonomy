@@ -1,4 +1,4 @@
-image: my_track_map.pgm
+image: /home/team2/f1tenth_autonomy/src/team_planning/maps/my_track_map.pgm
 mode: trinary
 resolution: 0.058
 origin: [-84.9, -36.3, 0]

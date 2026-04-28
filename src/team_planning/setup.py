@@ -27,8 +27,9 @@ setup(
         'console_scripts': [
             'ftg = team_planning.ftg_node:main',
             'pure_pursuit = team_planning.pure_pursuit_node:main',
-            'record_waypoints = team_planning.record_waypoints:main',
             'mpp = team_planning.mpp_node:main',
+            'record_waypoints = team_planning.record_waypoints:main',
+            'noise_proxy = team_planning.noise_proxy:main',
         ],
     },
 )

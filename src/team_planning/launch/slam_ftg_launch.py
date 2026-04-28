@@ -43,7 +43,7 @@ def generate_launch_description():
         name='follow_the_gap',
         parameters=[{
             'scan_topic': '/scan',
-            'drive_topic': '/drive_ftg',
+            'drive_topic': '/drive',
         }],
         output='screen',
     )

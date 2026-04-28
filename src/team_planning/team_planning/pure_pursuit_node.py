@@ -25,39 +25,46 @@ class PurePursuit(Node):
 
         # Pure pursuit tuning
         self.declare_parameter('lookahead_distance', 1.2)
-        self.declare_parameter('speed', 1.5)
         self.declare_parameter('wheelbase', 0.33)
         self.declare_parameter('control_rate', 20.0)
-        self.declare_parameter('max_steering_angle', 0.4189)  # about 24 deg
+        self.declare_parameter('max_steering_angle', 0.4189)
         self.declare_parameter('loop_path', True)
 
-        # New: local path support from MPP
+        # Speed params
+        self.declare_parameter('max_speed', 2.5)
+        self.declare_parameter('min_speed', 0.8)
+        self.declare_parameter('curvature_lookahead_points', 8)
+
+        # Local path support from MPP
         self.declare_parameter('use_local_path_topic', False)
         self.declare_parameter('local_path_topic', '/local_path')
 
-        self.drive_topic = self.get_parameter('drive_topic').value
-        self.waypoints_csv = self.get_parameter('waypoints_csv').value
-        self.use_slam_pose = bool(self.get_parameter('use_slam_pose').value)
-        self.map_frame = self.get_parameter('map_frame').value
-        self.base_frame = self.get_parameter('base_frame').value
+        self.drive_topic         = self.get_parameter('drive_topic').value
+        self.waypoints_csv       = self.get_parameter('waypoints_csv').value
+        self.use_slam_pose       = bool(self.get_parameter('use_slam_pose').value)
+        self.map_frame           = self.get_parameter('map_frame').value
+        self.base_frame          = self.get_parameter('base_frame').value
 
-        self.lookahead_distance = float(self.get_parameter('lookahead_distance').value)
-        self.speed = float(self.get_parameter('speed').value)
-        self.wheelbase = float(self.get_parameter('wheelbase').value)
-        self.control_rate = float(self.get_parameter('control_rate').value)
-        self.max_steering_angle = float(self.get_parameter('max_steering_angle').value)
-        self.loop_path = bool(self.get_parameter('loop_path').value)
+        self.lookahead_distance  = float(self.get_parameter('lookahead_distance').value)
+        self.wheelbase           = float(self.get_parameter('wheelbase').value)
+        self.control_rate        = float(self.get_parameter('control_rate').value)
+        self.max_steering_angle  = float(self.get_parameter('max_steering_angle').value)
+        self.loop_path           = bool(self.get_parameter('loop_path').value)
+
+        self.max_speed           = float(self.get_parameter('max_speed').value)
+        self.min_speed           = float(self.get_parameter('min_speed').value)
+        self.curv_lookahead_pts  = int(self.get_parameter('curvature_lookahead_points').value)
 
         self.use_local_path_topic = bool(self.get_parameter('use_local_path_topic').value)
-        self.local_path_topic = self.get_parameter('local_path_topic').value
+        self.local_path_topic     = self.get_parameter('local_path_topic').value
 
         self.pub = self.create_publisher(AckermannDriveStamped, self.drive_topic, 10)
 
-        self.tf_buffer = Buffer()
+        self.tf_buffer   = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
         self.global_waypoints: List[Tuple[float, float]] = []
-        self.local_waypoints: List[Tuple[float, float]] = []
+        self.local_waypoints:  List[Tuple[float, float]] = []
 
         if self.waypoints_csv:
             self.global_waypoints = self.load_waypoints(self.waypoints_csv)
@@ -82,6 +89,11 @@ class PurePursuit(Node):
             self.get_logger().info(
                 f'Using SLAM pose: TF lookup {self.map_frame} -> {self.base_frame}'
             )
+
+        self.get_logger().info(
+            f'Speed scaling active | min={self.min_speed} m/s | max={self.max_speed} m/s | '
+            f'curvature_lookahead_points={self.curv_lookahead_pts}'
+        )
 
         self.timer = self.create_timer(1.0 / self.control_rate, self.control_callback)
 
@@ -170,9 +182,59 @@ class PurePursuit(Node):
 
         return path_points[-1]
 
+    def compute_curvature_ahead(
+        self,
+        nearest_i: int,
+        path_points: List[Tuple[float, float]]
+    ) -> float:
+        n = len(path_points)
+        if n < 3:
+            return 0.0
+
+        max_curvature = 0.0
+
+        for step in range(self.curv_lookahead_pts):
+            if self.loop_path:
+                i0 = (nearest_i + step)     % n
+                i1 = (nearest_i + step + 1) % n
+                i2 = (nearest_i + step + 2) % n
+            else:
+                i0 = nearest_i + step
+                i1 = nearest_i + step + 1
+                i2 = nearest_i + step + 2
+                if i2 >= n:
+                    break
+
+            ax, ay = path_points[i0]
+            bx, by = path_points[i1]
+            cx, cy = path_points[i2]
+
+            ab = math.hypot(bx - ax, by - ay)
+            bc = math.hypot(cx - bx, cy - by)
+            ca = math.hypot(ax - cx, ay - cy)
+
+            area = abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / 2.0
+
+            denom = ab * bc * ca
+            if denom < 1e-6:
+                continue
+
+            curvature = (4.0 * area) / denom
+            if curvature > max_curvature:
+                max_curvature = curvature
+
+        return max_curvature
+
+    def curvature_to_speed(self, curvature: float) -> float:
+        curvature_scale = 0.5
+        t = min(curvature / curvature_scale, 1.0)
+        t_smooth = t * t
+        speed = self.max_speed - t_smooth * (self.max_speed - self.min_speed)
+        return max(self.min_speed, min(self.max_speed, speed))
+
     def publish_drive(self, speed: float, steering: float):
         msg = AckermannDriveStamped()
-        msg.drive.speed = float(speed)
+        msg.drive.speed          = float(speed)
         msg.drive.steering_angle = float(steering)
         self.pub.publish(msg)
 
@@ -187,30 +249,31 @@ class PurePursuit(Node):
             return
 
         x, y, yaw = pose
-        nearest_i = self.nearest_index(x, y, path_points)
-        target = self.get_lookahead_point(x, y, nearest_i, path_points)
+        nearest_i  = self.nearest_index(x, y, path_points)
+        target     = self.get_lookahead_point(x, y, nearest_i, path_points)
         if target is None:
             return
 
         tx, ty = target
 
-        # Transform target point into vehicle frame
         dx = tx - x
         dy = ty - y
 
-        local_x = math.cos(-yaw) * dx - math.sin(-yaw) * dy
-        local_y = math.sin(-yaw) * dx + math.cos(-yaw) * dy
+        local_x =  math.cos(-yaw) * dx - math.sin(-yaw) * dy
+        local_y =  math.sin(-yaw) * dx + math.cos(-yaw) * dy
 
         ld = math.hypot(local_x, local_y)
         if ld < 1e-6:
             return
 
         curvature = 2.0 * local_y / (ld * ld)
-        steering = math.atan(self.wheelbase * curvature)
+        steering  = math.atan(self.wheelbase * curvature)
+        steering  = max(-self.max_steering_angle, min(self.max_steering_angle, steering))
 
-        steering = max(-self.max_steering_angle, min(self.max_steering_angle, steering))
+        ahead_curvature = self.compute_curvature_ahead(nearest_i, path_points)
+        speed           = self.curvature_to_speed(ahead_curvature)
 
-        self.publish_drive(self.speed, steering)
+        self.publish_drive(speed, steering)
 
 
 def main():
