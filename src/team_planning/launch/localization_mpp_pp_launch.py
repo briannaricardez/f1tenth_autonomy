@@ -119,8 +119,8 @@ def generate_launch_description():
         parameters=[{
             'scan_topic': '/scan',
             'mode_topic': '/control_mode',
-            'ftg_trigger_dist': 1.0,
-            'pp_return_dist': 1.3,
+            'ftg_trigger_dist': 0.8,
+            'pp_return_dist': 1.0,
             'front_half_angle_deg': 20.0,
             'default_mode': 'pp',
         }],
