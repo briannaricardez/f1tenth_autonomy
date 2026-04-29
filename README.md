@@ -8,27 +8,30 @@ This project supports both:
 
 ---
 
-## Stack Architecture---
-
-## TF Tree---
-
-
 ## Stack Architecture
+
+```
 SLAM Localization (slam_toolbox)
-↓
-Motion Path Planning (MPP) - local horizon from global waypoints
-↓
+            ↓
+Motion Path Planning (MPP) — local horizon from global waypoints
+            ↓
 Pure Pursuit (Primary Controller) — curvature-adaptive speed 1.5-3.5 m/s
-↓
+            ↓
 Follow-The-Gap (Emergency Controller) — reactive avoidance 1.0-1.4 m/s
-↓
+            ↓
 Safety Supervisor — PP/FTG switching at 0.8m trigger / 1.0m return
-↓
+            ↓
 DriveMux → /drive
+```
+
 ---
 
 ## TF Tree
+
+```
 map → ego_racecar/odom → ego_racecar/base_link → ego_racecar/laser
+```
+
 ---
 
 ## Speed Hierarchy
@@ -57,7 +60,7 @@ map → ego_racecar/odom → ego_racecar/base_link → ego_racecar/laser
 - Python 3
 - colcon build tool
 - numpy
-- slam_toolbox: sudo apt install ros-humble-slam-toolbox
+- slam_toolbox: `sudo apt install ros-humble-slam-toolbox`
 
 ---
 
@@ -116,14 +119,14 @@ ros2 launch team_planning localization_mpp_pp_launch.py \
 
 | Node | Package | Description |
 | --- | --- | --- |
-| ftg | team_planning | Follow-The-Gap reactive obstacle avoidance |
-| pure_pursuit | team_planning | Pure Pursuit with curvature-adaptive speed scaling |
-| mpp | team_planning | Model Predictive Planner — local horizon from global waypoints |
-| record_waypoints | team_planning | Waypoint recorder with auto loop-closure detection |
-| noise_proxy | team_planning | Sensor noise injection for robustness testing |
-| drive_mux | team_control | Switches between PP and FTG based on /control_mode |
-| safety_supervisor | team_control | Publishes control mode based on front obstacle distance |
-| keyboard_teleop | team_control | Manual keyboard control |
+| `ftg` | team_planning | Follow-The-Gap reactive obstacle avoidance |
+| `pure_pursuit` | team_planning | Pure Pursuit with curvature-adaptive speed scaling |
+| `mpp` | team_planning | Model Predictive Planner — local horizon from global waypoints |
+| `record_waypoints` | team_planning | Waypoint recorder with auto loop-closure detection |
+| `noise_proxy` | team_planning | Sensor noise injection for robustness testing |
+| `drive_mux` | team_control | Switches between PP and FTG based on /control_mode |
+| `safety_supervisor` | team_control | Publishes control mode based on front obstacle distance |
+| `keyboard_teleop` | team_control | Manual keyboard control |
 
 ---
 
