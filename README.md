@@ -114,3 +114,17 @@ ros2 launch team_planning localization_mpp_pp_launch.py \
 ## License
 
 MIT
+
+## Stack Architecture
+SLAM Localization (slam_toolbox)
+↓
+Motion Path Planning (MPP) — local horizon from global waypoints
+↓
+Pure Pursuit (Primary Controller) — curvature-adaptive speed scaling 1.5–3.5 m/s
+↓
+Follow-The-Gap (Emergency Controller) — reactive obstacle avoidance 1.0–1.4 m/s
+↓
+Safety Supervisor — switches PP↔FTG at 0.8m trigger / 1.0m return
+↓
+DriveMux → /drive
+## TF Tree
