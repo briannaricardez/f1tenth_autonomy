@@ -226,8 +226,8 @@ class PurePursuit(Node):
         return max_curvature
 
     def curvature_to_speed(self, curvature: float) -> float:
-        curvature_scale = 0.5
-        t = min(curvature / curvature_scale, 1.0)
+        curvature_scale = 0.8
+        t = min(max(curvature - 0.05, 0.0) / curvature_scale, 1.0)
         t_smooth = t * t
         speed = self.max_speed - t_smooth * (self.max_speed - self.min_speed)
         return max(self.min_speed, min(self.max_speed, speed))
