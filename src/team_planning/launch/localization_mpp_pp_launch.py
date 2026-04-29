@@ -9,45 +9,19 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('team_planning')
-
-    amcl_params = os.path.join(pkg_share, 'config', 'amcl_params.yaml')
-    map_server_params = os.path.join(pkg_share, 'config', 'map_server_params.yaml')
+    default_params = os.path.join(
+        pkg_share, 'config', 'slam_toolbox_localization_params.yaml'
+    )
 
     use_sim_time = DeclareLaunchArgument(
         'use_sim_time', default_value='true')
 
+    slam_params_file = DeclareLaunchArgument(
+        'slam_params_file', default_value=default_params)
+
     waypoints_csv = DeclareLaunchArgument(
         'waypoints_csv',
         description='Path to waypoints CSV file'
-    )
-
-    map_server_node = Node(
-        package='nav2_map_server',
-        executable='map_server',
-        name='map_server',
-        output='screen',
-        parameters=[map_server_params],
-    )
-
-    amcl_node = Node(
-        package='nav2_amcl',
-        executable='amcl',
-        name='amcl',
-        output='screen',
-        parameters=[amcl_params],
-    )
-
-    lifecycle_manager = Node(
-        package='nav2_lifecycle_manager',
-        executable='lifecycle_manager',
-        name='lifecycle_manager_localization',
-        output='screen',
-        parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'autostart': True,
-            'bond_timeout': 0.0,
-            'node_names': ['map_server', 'amcl'],
-        }],
     )
 
     static_tf = Node(
@@ -56,6 +30,17 @@ def generate_launch_description():
         name='base_to_laser_tf',
         arguments=['0', '0', '0', '0', '0', '0',
                    'ego_racecar/base_link', 'ego_racecar/laser'],
+    )
+
+    slam_node = Node(
+        package='slam_toolbox',
+        executable='localization_slam_toolbox_node',
+        name='slam_toolbox',
+        output='screen',
+        parameters=[
+            LaunchConfiguration('slam_params_file'),
+            {'use_sim_time': LaunchConfiguration('use_sim_time')},
+        ],
     )
 
     mpp_node = Node(
@@ -142,11 +127,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         use_sim_time,
+        slam_params_file,
         waypoints_csv,
         static_tf,
-        map_server_node,
-        amcl_node,
-        lifecycle_manager,
+        slam_node,
         mpp_node,
         pp_node,
         ftg_node,
