@@ -12,6 +12,25 @@ This project supports both:
 
 ## TF Tree---
 
+
+## Stack Architecture
+SLAM Localization (slam_toolbox)
+↓
+Motion Path Planning (MPP) - local horizon from global waypoints
+↓
+Pure Pursuit (Primary Controller) — curvature-adaptive speed 1.5-3.5 m/s
+↓
+Follow-The-Gap (Emergency Controller) — reactive avoidance 1.0-1.4 m/s
+↓
+Safety Supervisor — PP/FTG switching at 0.8m trigger / 1.0m return
+↓
+DriveMux → /drive
+---
+
+## TF Tree
+map → ego_racecar/odom → ego_racecar/base_link → ego_racecar/laser
+---
+
 ## Speed Hierarchy
 
 | Mode | m/s | MPH | Condition |
