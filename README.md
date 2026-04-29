@@ -1,148 +1,115 @@
-# F1Tenth Autonomy
+# F1TENTH Autonomous Racing Stack
 
-ROS 2 workspace for autonomous racing on the F1Tenth platform. The stack uses SLAM for localization, a safety supervisor to switch between reactive obstacle avoidance (Follow-The-Gap) and path tracking (Pure Pursuit), and a Model Predictive Planner for local path generation.
+A full autonomous F1TENTH racing stack built in **ROS2 Humble**, integrating **SLAM-based localization, local motion path planning, curvature-adaptive Pure Pursuit control, Follow-The-Gap emergency avoidance, and automatic controller arbitration**.
 
-## Prerequisites
+This project supports both:
+- Simulation validation in f1tenth_gym_ros
+- Physical deployment on the F1TENTH vehicle
 
-- ROS 2 (Humble or later)
+---
+
+## Stack Architecture---
+
+## Dependencies
+
+- ROS 2 Humble
 - Python 3
-- [colcon](https://colcon.readthedocs.io/) build tool
-- [vcs](https://github.com/dirk-thomas/vcstool) for dependency management
+- colcon build tool
 - numpy
-- slam_toolbox (`sudo apt install ros-humble-slam-toolbox`)
+- slam_toolbox: `sudo apt install ros-humble-slam-toolbox`
+- nav2_amcl: `sudo apt install ros-humble-nav2-amcl`
+- nav2_map_server: `sudo apt install ros-humble-nav2-map-server`
+- nav2_lifecycle_manager: `sudo apt install ros-humble-nav2-lifecycle-manager`
+
+---
 
 ## Setup
 
 ```bash
-# Clone the repository
-git clone <repo-url> f1tenth_autonomy
+git clone https://github.com/briannaricardez/f1tenth_autonomy.git
 cd f1tenth_autonomy
-
-# Import simulator dependencies
 vcs import src < deps/f1tenth.repos
-
-# Install ROS dependencies
 rosdep install --from-paths src --ignore-src -r -y
-
-# Build
 colcon build
 source install/setup.bash
 ```
 
-## How It Works
+---
 
-The system operates in two phases:
+## Competition Day Workflow
 
-1. **Mapping** -- On the first lap, slam_toolbox builds an occupancy grid map from lidar scans (saved as `maps/my_track_map.pgm`). Waypoints are recorded during this lap.
-2. **Localization + Racing** -- On subsequent runs, slam_toolbox matches live scans against the saved map to continuously correct the car's pose. Pure Pursuit uses this corrected pose to follow the recorded waypoints.
-
-A safety supervisor monitors the front lidar cone and automatically switches from Pure Pursuit to Follow-The-Gap when an obstacle is too close, then switches back once the path is clear.
-
-## Running
-
-### Step 1: Build a map (first time only)
-
-Drive manually or with FTG to build and save a map:
+### Step 1 — Mapping lap (do this fresh at every new venue)
 
 ```bash
-# Terminal 1: simulator
+# Terminal 1 — simulator (skip for real car)
 ros2 launch f1tenth_gym_ros gym_bridge_launch.py
 
-# Terminal 2: SLAM in mapping mode
-ros2 launch team_planning slam_only_launch.py
-
-# Terminal 3: drive manually
-ros2 run team_control keyboard_teleop
-```
-
-Visualize in RViz2 by adding `/map` and TF displays.
-
-### Step 2: Record waypoints
-
-```bash
-ros2 run team_planning record_waypoints --ros-args -p out_csv:=/path/to/my_track.csv
-```
-
-The recorder auto-stops when it detects loop closure (car returns near its starting point after sufficient distance).
-
-### Step 3: Race with localization
-
-Set the `map_file_name` in `config/slam_toolbox_localization_params.yaml` to your saved map, then:
-
-```bash
-ros2 launch team_planning localization_pp_launch.py waypoints_csv:=/path/to/my_track.csv
-```
-
-### SLAM + FTG (mapping while driving autonomously)
-
-```bash
+# Terminal 2 — SLAM + FTG mapping
 ros2 launch team_planning slam_ftg_launch.py
+
+# Terminal 3 — serialize map immediately after lap completes
+ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
+    "{filename: '$HOME/f1tenth_autonomy/src/team_planning/maps/my_track_map'}"
+
+ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \
+    "{name: {data: '$HOME/f1tenth_autonomy/src/team_planning/maps/my_track_map'}}"
 ```
 
-### SLAM + Pure Pursuit (mapping while tracking waypoints)
+### Step 2 — Update map path for your machine
 
 ```bash
-ros2 launch team_planning slam_pp_launch.py waypoints_csv:=/path/to/my_track.csv
+sed -i "s|/home/team2|$HOME|g" \
+    ~/f1tenth_autonomy/src/team_planning/config/slam_toolbox_localization_params.yaml
+
+colcon build --packages-select team_planning
+source install/setup.bash
 ```
 
-### Follow-The-Gap only (no SLAM)
+### Step 3 — Race
 
 ```bash
-ros2 launch team_planning ftg_launch.py
+ros2 launch team_planning localization_mpp_pp_launch.py \
+    waypoints_csv:=$HOME/f1tenth_autonomy/src/team_planning/waypoints/my_track.csv
 ```
 
-### Keyboard Teleop
+---
 
-```bash
-ros2 run team_control keyboard_teleop
-```
+## Speed Hierarchy
 
-Controls: `W/S` speed, `A/D` steer, `Space` stop, `R` reset, `Q` quit.
+| Mode | m/s | MPH | Condition |
+| --- | --- | --- | --- |
+| PP straight | 3.5 | 7.8 | Open track |
+| PP corner | 1.5 | 3.4 | Tight curvature |
+| FTG max | 1.4 | 3.1 | Obstacle avoidance |
+| FTG min | 1.0 | 2.2 | Tightest avoidance |
 
-## Architecture
+---
 
-```
-                       slam_toolbox
-                    (map->odom TF + /map)
-                           |
-/scan ---+--> [FTG Node] ---------> /drive_ftg --+
-         |                                       |
-         +--> [Safety Supervisor] -> /control_mode --> [Drive Mux] --> /drive
-         |                          (pp / ftg)   |
-         |   [MPP Node] -------> /local_path     |
-         |        |                              |
-         |   [Pure Pursuit] ---> /drive_pp ------+
-         |   (TF2: map->base_link)
-         |
-/odom ---+
-```
+## Safety Supervisor Thresholds
 
-**Safety supervisor** watches the front lidar cone (+-20 deg). When an obstacle is closer than 1.0m, it switches the mux to FTG. When the front clears past 1.3m, it switches back to PP.
+| Threshold | Distance | Feet |
+| --- | --- | --- |
+| FTG trigger | 0.8m | 2.6 ft |
+| PP return | 1.0m | 3.3 ft |
 
-**MPP (Model Predictive Planner)** slices the global waypoints into a local horizon and publishes it as `nav_msgs/Path`. Pure Pursuit can optionally follow this local path instead of the full global waypoints.
-
-**TF tree:** `map -> ego_racecar/odom -> ego_racecar/base_link -> ego_racecar/laser`
+---
 
 ## Nodes
 
 | Node | Package | Description |
-|------|---------|-------------|
+| --- | --- | --- |
 | `ftg` | team_planning | Follow-The-Gap reactive obstacle avoidance |
-| `pure_pursuit` | team_planning | Pure Pursuit path tracker (TF2 pose, global/local path) |
-| `mpp` | team_planning | Model Predictive Planner (local horizon from global waypoints) |
+| `pure_pursuit` | team_planning | Pure Pursuit with curvature-adaptive speed scaling |
+| `mpp` | team_planning | Model Predictive Planner — local horizon from global waypoints |
 | `record_waypoints` | team_planning | Waypoint recorder with auto loop-closure detection |
-| `drive_mux` | team_control | Switches between PP and FTG based on `/control_mode` |
+| `noise_proxy` | team_planning | Sensor noise injection for robustness testing |
+| `drive_mux` | team_control | Switches between PP and FTG based on /control_mode |
 | `safety_supervisor` | team_control | Publishes control mode based on front obstacle distance |
 | `keyboard_teleop` | team_control | Manual keyboard control |
 
-## Packages
+---
 
-| Package | Description |
-|---------|-------------|
-| `team_planning` | SLAM config, FTG, Pure Pursuit, MPP, waypoint recorder |
-| `team_control` | Keyboard teleop, drive multiplexer, safety supervisor |
-| `f1tenth_gym` | Simulation environment (external, via vcs) |
-| `f1tenth_gym_ros` | ROS 2 bridge for the simulator (external, via vcs) |
+## TF Tree---
 
 ## License
 
