@@ -17,9 +17,6 @@ This project supports both:
 - colcon build tool
 - numpy
 - slam_toolbox: `sudo apt install ros-humble-slam-toolbox`
-- nav2_amcl: `sudo apt install ros-humble-nav2-amcl`
-- nav2_map_server: `sudo apt install ros-humble-nav2-map-server`
-- nav2_lifecycle_manager: `sudo apt install ros-humble-nav2-lifecycle-manager`
 
 ---
 
