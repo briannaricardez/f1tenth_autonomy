@@ -19,6 +19,7 @@ slam_toolbox:
 
     use_scan_matching: true
     use_scan_barycenter: true
+    use_sim_time: false
 
     # Map resolution and range — tuned for 1/10 scale indoor racing
     resolution: 0.05

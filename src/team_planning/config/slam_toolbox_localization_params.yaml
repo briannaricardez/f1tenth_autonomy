@@ -1,6 +1,6 @@
 slam_toolbox:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     mode: localization
     map_file_name: /home/team2/f1tenth_autonomy/src/team_planning/maps/my_track_map
 
