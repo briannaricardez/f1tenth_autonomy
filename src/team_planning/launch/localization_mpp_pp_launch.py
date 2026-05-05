@@ -2,7 +2,7 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -20,7 +20,7 @@ def generate_launch_description():
     )
 
     use_sim_time = DeclareLaunchArgument(
-        'use_sim_time', default_value='false')  # FALSE for real hardware
+        'use_sim_time', default_value='false')
 
     slam_params_file = DeclareLaunchArgument(
         'slam_params_file', default_value=default_params)
@@ -29,8 +29,6 @@ def generate_launch_description():
         'waypoints_csv',
         description='Path to waypoints CSV file'
     )
-
-    # ── Hardware drivers ──────────────────────────────────────────────────────
 
     vesc_driver = Node(
         package='vesc_driver',
@@ -79,8 +77,6 @@ def generate_launch_description():
         }],
     )
 
-    # ── TF ───────────────────────────────────────────────────────────────────
-
     static_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -88,8 +84,6 @@ def generate_launch_description():
         arguments=['0', '0', '0', '0', '0', '0',
                    'ego_racecar/base_link', 'ego_racecar/laser'],
     )
-
-    # ── SLAM (localization mode) ──────────────────────────────────────────────
 
     slam_node = Node(
         package='slam_toolbox',
@@ -102,8 +96,6 @@ def generate_launch_description():
         ],
     )
 
-    # ── Planning ─────────────────────────────────────────────────────────────
-
     mpp_node = Node(
         package='team_planning',
         executable='mpp',
@@ -112,7 +104,6 @@ def generate_launch_description():
         parameters=[{
             'waypoints_csv': LaunchConfiguration('waypoints_csv'),
             'path_topic': '/local_path',
-            'scan_topic': '/scan',
             'map_frame': 'map',
             'base_frame': 'ego_racecar/base_link',
             'horizon_points': 25,
@@ -135,16 +126,14 @@ def generate_launch_description():
             'use_local_path_topic': True,
             'local_path_topic': '/local_path',
             'lookahead_distance': 1.2,
-            'max_speed': 3.5,
-            'min_speed': 1.5,
+            'max_speed': 1.5,
+            'min_speed': 0.5,
             'curvature_lookahead_points': 8,
             'wheelbase': 0.33,
             'max_steering_angle': 0.4189,
             'loop_path': True,
         }],
     )
-
-    # ── Safety ────────────────────────────────────────────────────────────────
 
     ftg_node = Node(
         package='team_planning',
@@ -154,8 +143,15 @@ def generate_launch_description():
         parameters=[{
             'scan_topic': '/scan',
             'drive_topic': '/drive_ftg',
-            'max_speed': 1.4,
-            'min_speed': 1.0,
+            'max_speed': 0.7,
+            'min_speed': 0.3,
+            'max_steer': 0.35,
+            'bubble_radius': 0.6,
+            'gap_threshold': 0.8,
+            'min_range': 0.15,
+            'steer_slew_rate': 5.0,
+            'front_danger_dist': 0.8,
+            'front_danger_angle_deg': 30.0,
         }],
     )
 
@@ -192,18 +188,15 @@ def generate_launch_description():
         use_sim_time,
         slam_params_file,
         waypoints_csv,
-        # Hardware first
         vesc_driver,
         lidar_driver,
         ackermann_bridge,
         vesc_to_odom,
-        # Then TF and SLAM
         static_tf,
         slam_node,
-        # Then planning and control
         mpp_node,
         pp_node,
-        ftg_node,
+        TimerAction(period=5.0, actions=[ftg_node]),
         supervisor_node,
         mux_node,
     ])
