@@ -109,6 +109,17 @@ def generate_launch_description():
         }],
     )
 
+    auto_map_saver = Node(
+        package='team_planning',
+        executable='auto_map_saver',
+        name='auto_map_saver',
+        output='screen',
+        parameters=[{
+            'map_path': '/home/team2/f1tenth_autonomy/src/team_planning/maps/my_track_map',
+            'save_interval': 30.0,
+        }],
+    )
+
     return LaunchDescription([
         use_sim_time,
         slam_params_file,
@@ -119,4 +130,5 @@ def generate_launch_description():
         static_tf,
         slam_node,
         TimerAction(period=5.0, actions=[ftg_node]),
+        TimerAction(period=10.0, actions=[auto_map_saver]),
     ])

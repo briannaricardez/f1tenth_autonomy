@@ -30,6 +30,7 @@ setup(
             'mpp = team_planning.mpp_node:main',
             'record_waypoints = team_planning.record_waypoints:main',
             'noise_proxy = team_planning.noise_proxy:main',
+            'auto_map_saver = team_planning.auto_map_saver:main',
         ],
     },
 )
