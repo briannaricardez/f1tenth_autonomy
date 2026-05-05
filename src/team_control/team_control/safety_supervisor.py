@@ -23,8 +23,8 @@ class SafetySupervisor(Node):
 
         self.declare_parameter('scan_topic', '/scan')
         self.declare_parameter('mode_topic', '/control_mode')
-        self.declare_parameter('ftg_trigger_dist', 1.0)
-        self.declare_parameter('pp_return_dist', 1.3)
+        self.declare_parameter('ftg_trigger_dist', 0.8)
+        self.declare_parameter('pp_return_dist', 1.0)
         self.declare_parameter('front_half_angle_deg', 20.0)
         self.declare_parameter('default_mode', 'pp')
 
