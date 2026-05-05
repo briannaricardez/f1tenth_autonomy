@@ -13,7 +13,7 @@ class RecordWaypoints(Node):
     def __init__(self):
         super().__init__('record_waypoints')
 
-        self.declare_parameter('odom_topic', '/ego_racecar/odom')
+        self.declare_parameter('odom_topic', '/odom')
         self.declare_parameter('out_csv', '/tmp/waypoints.csv')
         self.declare_parameter('min_dist', 0.20)
         self.declare_parameter('auto_stop_on_loop', True)
