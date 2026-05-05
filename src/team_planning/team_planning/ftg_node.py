@@ -21,13 +21,15 @@ class FollowTheGap(Node):
         self.declare_parameter('max_steer', 0.35)
         self.declare_parameter('lookahead_dist', 2.0)
         self.declare_parameter('fov_deg', 180.0)
-        self.declare_parameter('bubble_radius', 0.45)
+        self.declare_parameter('bubble_radius', 0.6)
         self.declare_parameter('smooth_window', 5)
         self.declare_parameter('gap_threshold', 0.8)
         self.declare_parameter('min_range', 0.15)
         self.declare_parameter('max_range', 30.0)
-        self.declare_parameter('steer_slew_rate', 2.5)
+        self.declare_parameter('steer_slew_rate', 5.0)
         self.declare_parameter('publish_hz', 30.0)
+        self.declare_parameter('front_danger_dist', 0.8)
+        self.declare_parameter('front_danger_angle_deg', 30.0)
 
         self.scan_topic = self.get_parameter('scan_topic').value
         self.drive_topic = self.get_parameter('drive_topic').value
@@ -43,6 +45,8 @@ class FollowTheGap(Node):
         self.max_range = float(self.get_parameter('max_range').value)
         self.steer_slew_rate = float(self.get_parameter('steer_slew_rate').value)
         self.publish_hz = float(self.get_parameter('publish_hz').value)
+        self.front_danger_dist = float(self.get_parameter('front_danger_dist').value)
+        self.front_danger_angle_deg = float(self.get_parameter('front_danger_angle_deg').value)
 
         self.pub = self.create_publisher(AckermannDriveStamped, self.drive_topic, 10)
         self.sub = self.create_subscription(LaserScan, self.scan_topic, self.on_scan, 10)
@@ -52,7 +56,8 @@ class FollowTheGap(Node):
 
         self.get_logger().info(
             f"FTG running | scan={self.scan_topic} drive={self.drive_topic} "
-            f"fov={self.fov_deg} bubble={self.bubble_radius} max_speed={self.max_speed}"
+            f"fov={self.fov_deg} bubble={self.bubble_radius} max_speed={self.max_speed} "
+            f"front_danger_dist={self.front_danger_dist}m"
         )
 
     def on_scan(self, msg: LaserScan):
@@ -75,6 +80,48 @@ class FollowTheGap(Node):
             kernel = np.ones(w, dtype=np.float32) / w
             r = np.convolve(r, kernel, mode='same')
 
+        # Front danger zone check
+        front_angle = math.radians(self.front_danger_angle_deg)
+        front_mask = np.abs(a) <= front_angle
+        front_ranges = r[front_mask]
+
+        if front_ranges.size > 0:
+            min_front = float(np.min(front_ranges))
+            if min_front < self.front_danger_dist:
+                left_mask = a > front_angle
+                right_mask = a < -front_angle
+                left_mean = float(np.mean(r[left_mask])) if np.any(left_mask) else 0.0
+                right_mean = float(np.mean(r[right_mask])) if np.any(right_mask) else 0.0
+
+                if left_mean >= right_mean:
+                    desired_steer = self.max_steer
+                else:
+                    desired_steer = -self.max_steer
+
+                speed = self.min_speed
+
+                now = self.get_clock().now()
+                dt = (now - self.last_time).nanoseconds * 1e-9
+                if dt <= 0.0:
+                    dt = 1.0 / self.publish_hz
+                max_delta = self.steer_slew_rate * dt
+                steer = clamp(desired_steer, self.last_steer - max_delta, self.last_steer + max_delta)
+                self.last_steer = steer
+                self.last_time = now
+
+                out = AckermannDriveStamped()
+                out.header.stamp = now.to_msg()
+                out.drive.steering_angle = float(steer)
+                out.drive.speed = float(speed)
+                self.pub.publish(out)
+
+                self.get_logger().warn(
+                    f'FRONT DANGER: {min_front:.2f}m | steering {"LEFT" if desired_steer > 0 else "RIGHT"}',
+                    throttle_duration_sec=0.5
+                )
+                return
+
+        # Normal FTG
         closest_idx = int(np.argmin(r))
         closest_dist = float(r[closest_idx])
 
