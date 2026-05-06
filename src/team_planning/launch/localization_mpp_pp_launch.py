@@ -15,9 +15,7 @@ def generate_launch_description():
     default_vesc_params = os.path.expanduser(
         '~/f1tenth_autonomy/src/vesc/vesc_driver/params/vesc_config.yaml'
     )
-    default_urg_params = (
-        '/opt/ros/humble/share/urg_node/launch/urg_node_ethernet.yaml'
-    )
+    default_urg_params = os.path.join(pkg_share, 'config', 'urg_node_params.yaml')
 
     use_sim_time = DeclareLaunchArgument(
         'use_sim_time', default_value='false')
