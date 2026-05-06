@@ -1,8 +1,8 @@
-"""Launch VESC + LiDAR + slam_toolbox localization + Pure Pursuit."""
+"""Launch VESC + LiDAR + slam_toolbox localization + Pure Pursuit + FTG safety."""
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -111,6 +111,41 @@ def generate_launch_description():
         }],
     )
 
+    ftg_node = Node(
+        package='team_planning',
+        executable='ftg',
+        name='follow_the_gap',
+        output='screen',
+        parameters=[{
+            'scan_topic': '/scan',
+            'drive_topic': '/drive_ftg',
+            'max_speed': 0.7,
+            'min_speed': 0.3,
+            'max_steer': 0.35,
+            'bubble_radius': 0.6,
+            'gap_threshold': 0.8,
+            'min_range': 0.15,
+            'steer_slew_rate': 5.0,
+            'front_danger_dist': 0.8,
+            'front_danger_angle_deg': 30.0,
+        }],
+    )
+
+    supervisor_node = Node(
+        package='team_control',
+        executable='safety_supervisor',
+        name='safety_supervisor',
+        output='screen',
+        parameters=[{
+            'scan_topic': '/scan',
+            'mode_topic': '/control_mode',
+            'ftg_trigger_dist': 0.8,
+            'pp_return_dist': 1.0,
+            'front_half_angle_deg': 20.0,
+            'default_mode': 'pp',
+        }],
+    )
+
     mux_node = Node(
         package='team_control',
         executable='drive_mux',
@@ -136,5 +171,7 @@ def generate_launch_description():
         static_tf,
         slam_node,
         pp_node,
+        TimerAction(period=5.0, actions=[ftg_node]),
+        supervisor_node,
         mux_node,
     ])
