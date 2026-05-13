@@ -35,6 +35,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
 
 
 class CenterlineFollower(Node):

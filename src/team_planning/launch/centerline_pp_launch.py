@@ -101,7 +101,7 @@ def generate_launch_description():
         parameters=[{
             'drive_topic': '/drive_pp',
             'waypoints_csv': '',
-            'use_slam_pose': True,
+            'use_slam_pose': False,
             'map_frame': 'ego_racecar/base_link',
             'base_frame': 'ego_racecar/base_link',
             'use_local_path_topic': True,
