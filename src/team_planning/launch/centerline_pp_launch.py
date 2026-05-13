@@ -110,7 +110,7 @@ def generate_launch_description():
             'max_speed': 1.5,
             'min_speed': 0.5,
             'wheelbase': 0.33,
-            'max_steering_angle': 0.4189,
+            'max_steering_angle': 0.36,
             'loop_path': False,
         }],
     )
