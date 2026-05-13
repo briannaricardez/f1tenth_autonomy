@@ -79,6 +79,32 @@ source install/setup.bash
 
 ## Competition Day Workflow
 
+There are two supported workflows:
+
+- **Map-free (recommended for fast bring-up):** a reactive centerline follower extracts the track centerline from each LiDAR scan and feeds Pure Pursuit. No SLAM, no waypoint recording, no slow first lap. See "Map-free racing" below.
+- **SLAM + global waypoints (best lap times):** map the track once, record waypoints, then race with MPP + Pure Pursuit. See "Mapping lap" below.
+
+---
+
+## Map-free racing (no SLAM, no first-lap mapping)
+
+The `centerline_follower` node extracts a rolling local centerline from each LiDAR scan and publishes it on `/local_path`. Pure Pursuit consumes that topic with `map_frame = base_frame = ego_racecar/base_link`, so its TF lookup is identity and the local path is followed directly. Safety Supervisor + FTG fallback work unchanged.
+
+```bash
+# Simulation — launch the gym bridge first
+ros2 launch f1tenth_gym_ros gym_bridge_launch.py
+ros2 launch team_planning centerline_pp_sim_launch.py
+
+# Real car
+ros2 launch team_planning centerline_pp_launch.py
+```
+
+Tune via the centerline_follower parameters in the launch file: `lookahead_samples` (sets the local horizon), `slab_half_width` (wall-detection robustness), `smoothing_window` (lateral noise rejection).
+
+---
+
+## SLAM + global waypoints workflow
+
 ### Step 1 — Mapping lap (do this fresh at every new venue)
 
 ```bash
@@ -122,6 +148,7 @@ ros2 launch team_planning localization_mpp_pp_launch.py \
 | `ftg` | team_planning | Follow-The-Gap reactive obstacle avoidance |
 | `pure_pursuit` | team_planning | Pure Pursuit with curvature-adaptive speed scaling |
 | `mpp` | team_planning | Model Predictive Planner — local horizon from global waypoints |
+| `centerline_follower` | team_planning | Map-free reactive planner — extracts local track centerline from each LiDAR scan |
 | `record_waypoints` | team_planning | Waypoint recorder with auto loop-closure detection |
 | `noise_proxy` | team_planning | Sensor noise injection for robustness testing |
 | `drive_mux` | team_control | Switches between PP and FTG based on /control_mode |
