@@ -45,22 +45,11 @@ def generate_launch_description():
         executable='pure_pursuit',
         name='pure_pursuit',
         parameters=[{
-            'drive_topic': '/drive_pp',
+            'drive_topic': '/drive',
             'waypoints_csv': LaunchConfiguration('waypoints_csv'),
             'use_slam_pose': True,
             'map_frame': 'map',
             'base_frame': 'ego_racecar/base_link',
-        }],
-        output='screen',
-    )
-
-    mux_node = Node(
-        package='team_control',
-        executable='drive_mux',
-        name='drive_mux',
-        parameters=[{
-            'in_topic': '/drive_pp',
-            'out_topic': '/drive',
         }],
         output='screen',
     )
@@ -72,5 +61,4 @@ def generate_launch_description():
         static_tf,
         slam_node,
         pp_node,
-        mux_node,
     ])

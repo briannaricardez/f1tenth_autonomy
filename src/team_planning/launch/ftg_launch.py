@@ -9,20 +9,10 @@ def generate_launch_description():
         name='follow_the_gap',
         parameters=[{
             'scan_topic': '/scan',
-            'drive_topic': '/drive_ftg',
+            'drive_topic': '/drive',
+            'use_path_bias': False,
         }],
         output='screen',
     )
 
-    mux_node = Node(
-        package='team_control',
-        executable='drive_mux',
-        name='drive_mux',
-        parameters=[{
-            'in_topic': '/drive_ftg',
-            'out_topic': '/drive',
-        }],
-        output='screen',
-    )
-
-    return LaunchDescription([ftg_node, mux_node])
+    return LaunchDescription([ftg_node])

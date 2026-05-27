@@ -153,32 +153,18 @@ def generate_launch_description():
         }],
     )
 
-    supervisor_node = Node(
+    arbiter_node = Node(
         package='team_control',
-        executable='safety_supervisor',
-        name='safety_supervisor',
-        output='screen',
-        parameters=[{
-            'scan_topic': '/scan',
-            'mode_topic': '/control_mode',
-            'ftg_trigger_dist': 0.8,
-            'pp_return_dist': 1.0,
-            'front_half_angle_deg': 20.0,
-            'default_mode': 'pp',
-        }],
-    )
-
-    mux_node = Node(
-        package='team_control',
-        executable='drive_mux',
-        name='drive_mux',
+        executable='drive_arbiter',
+        name='drive_arbiter',
         output='screen',
         parameters=[{
             'pp_topic': '/drive_pp',
             'ftg_topic': '/drive_ftg',
-            'mode_topic': '/control_mode',
+            'scan_topic': '/scan',
             'out_topic': '/drive',
-            'default_mode': 'pp',
+            'blend_far': 1.5,
+            'blend_near': 0.5,
         }],
     )
 
@@ -195,6 +181,5 @@ def generate_launch_description():
         mpp_node,
         pp_node,
         TimerAction(period=5.0, actions=[ftg_node]),
-        supervisor_node,
-        mux_node,
+        arbiter_node,
     ])

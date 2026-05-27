@@ -2,8 +2,8 @@
 
 No SLAM, no map_server, no waypoint CSV. The centerline follower extracts a
 rolling local path from each LiDAR scan; Pure Pursuit runs that path in the
-ego_racecar/base_link frame; the safety supervisor switches to FTG on close
-obstacles via drive_mux.
+ego_racecar/base_link frame; the drive arbiter continuously blends PP and FTG
+based on minimum front distance.
 """
 import os
 from ament_index_python.packages import get_package_share_directory
@@ -126,41 +126,48 @@ def generate_launch_description():
             'max_speed': 0.7,
             'min_speed': 0.3,
             'max_steer': 0.35,
-            'bubble_radius': 0.6,
+            'bubble_radius': 0.4,
             'gap_threshold': 0.8,
             'min_range': 0.15,
             'steer_slew_rate': 5.0,
-            'front_danger_dist': 1.2,
+            'front_danger_dist': 0.8,
             'front_danger_angle_deg': 30.0,
+            'local_path_topic': '/local_path',
+            'use_path_bias': True,
+            'path_lookahead_dist': 1.0,
+            'path_stale_timeout': 0.5,
+            'path_bias_weight': 1.5,
+            'gap_size_weight': 0.5,
+            'gap_range_weight': 1.0,
+            'front_danger_gain': 2.0,
         }],
     )
 
-    supervisor_node = Node(
+    arbiter_node = Node(
         package='team_control',
-        executable='safety_supervisor',
-        name='safety_supervisor',
-        output='screen',
-        parameters=[{
-            'scan_topic': '/scan',
-            'mode_topic': '/control_mode',
-            'ftg_trigger_dist': 0.80,
-            'pp_return_dist': 1.0,
-            'front_half_angle_deg': 20.0,
-            'default_mode': 'pp',
-        }],
-    )
-
-    mux_node = Node(
-        package='team_control',
-        executable='drive_mux',
-        name='drive_mux',
+        executable='drive_arbiter',
+        name='drive_arbiter',
         output='screen',
         parameters=[{
             'pp_topic': '/drive_pp',
             'ftg_topic': '/drive_ftg',
-            'mode_topic': '/control_mode',
+            'scan_topic': '/scan',
             'out_topic': '/drive',
-            'default_mode': 'pp',
+            'blend_topic': '/control_blend',
+            'arbiter_rate': 50.0,
+            'msg_stale_timeout': 0.2,
+            'scan_stale_timeout': 0.5,
+            'blend_far': 1.5,
+            'blend_near': 0.5,
+            'front_half_angle_deg': 20.0,
+            'alpha_smooth_beta': 0.4,
+            'max_speed': 2.0,
+            'emergency_speed': 0.4,
+            'beta_low': 0.25,
+            'beta_high': 0.7,
+            'slew_low': 2.5,
+            'slew_high': 6.0,
+            'v_ref': 2.0,
         }],
     )
 
@@ -173,6 +180,5 @@ def generate_launch_description():
         centerline_node,
         pp_node,
         TimerAction(period=5.0, actions=[ftg_node]),
-        supervisor_node,
-        mux_node,
+        arbiter_node,
     ])
