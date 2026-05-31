@@ -1,6 +1,6 @@
 # F1TENTH Autonomous Racing Stack
 
-A full autonomous F1TENTH racing stack built in ROS2 Humble, integrating map-free reactive centerline following, curvature-adaptive Pure Pursuit control, Follow-The-Gap emergency avoidance, and automatic controller arbitration.
+A full autonomous F1TENTH racing stack built in ROS2 Humble, integrating map-free reactive centerline following, curvature-adaptive Pure Pursuit control, Follow-The-Gap emergency avoidance, and continuous controller arbitration.
 
 No SLAM, no pre-recorded waypoints, no map. The car extracts a local track centerline from each LiDAR scan and follows it using Pure Pursuit, with FTG as a safety fallback.
 
@@ -14,13 +14,13 @@ This project supports both:
 
 LiDAR Scan -> Centerline Follower (rolling local path from wall midpoints)
                         |
-          Pure Pursuit (Primary Controller) curvature-adaptive speed 0.5-1.5 m/s
+          Pure Pursuit (Primary Controller) curvature-adaptive speed 1.2-4.0 m/s
                         |
-          Follow-The-Gap (Safety Fallback) reactive avoidance 0.3-0.7 m/s
+          Follow-The-Gap (Safety Fallback) reactive avoidance 0.5-1.5 m/s
                         |
-          Safety Supervisor PP/FTG switching at 0.8m trigger / 1.0m return
+          Drive Arbiter (continuous PP/FTG blend, danger lock at alpha>=0.85)
                         |
-                  DriveMux -> /drive
+                     /drive
 
 ---
 
@@ -38,19 +38,32 @@ Pure Pursuit runs with map_frame = base_frame = ego_racecar/base_link so all pat
 
 | Mode | m/s | MPH | Condition |
 | --- | --- | --- | --- |
-| PP straight | 1.5 | 3.4 | Open corridor |
-| PP corner | 0.5 | 1.1 | Tight curvature |
-| FTG max | 0.7 | 1.6 | Obstacle avoidance |
-| FTG min | 0.3 | 0.7 | Tightest avoidance |
+| PP straight | 4.0 | 8.9 | Open corridor |
+| PP corner | 1.2 | 2.7 | Tight curvature |
+| FTG max | 1.5 | 3.4 | Obstacle avoidance |
+| FTG min | 0.5 | 1.1 | Tightest avoidance |
 
 ---
 
-## Safety Supervisor Thresholds
+## Drive Arbiter Blend Thresholds
 
-| Threshold | Distance | Feet |
+| Threshold | Distance | Notes |
 | --- | --- | --- |
-| FTG trigger | 0.8m | 2.6 ft |
-| PP return | 1.0m | 3.3 ft |
+| Blend start (blend_far) | 1.5m | Alpha begins rising toward FTG |
+| Full FTG (blend_near) | 0.8m | Alpha reaches 1.0, pure FTG |
+| Smoothing bypass | alpha >= 0.85 | Output slew disabled for instant emergency steer |
+| FTG danger lock | 1.0m | FTG locks direction and snaps to max steer |
+| Startup lockout | 1.5s | Arbiter holds output for 1.5s on node start |
+
+---
+
+## FTG Obstacle Avoidance Behavior
+
+- On front danger detection, FTG measures average open space on left vs right side of scan
+- Direction is locked on first detection frame and held until obstacle clears
+- Steering snaps immediately to max angle with no slew rate limiting
+- Raw (unsmoothed) LiDAR ranges used for danger detection to preserve narrow obstacle returns
+- Gap target uses angular midpoint of gap opening, not deepest point
 
 ---
 
@@ -107,7 +120,8 @@ Key tuning parameters in centerline_pp_launch.py:
 | lookahead_samples | [0.4, 0.8, 1.2, 1.6, 2.0, 2.5, 3.0] | Local horizon length |
 | slab_half_width | 0.20 m | Wall detection robustness |
 | smoothing_window | 3 | Lateral noise rejection |
-| max_speed | 1.5 m/s | PP top speed |
+| max_speed | 4.0 m/s | PP top speed |
+| min_speed | 1.2 m/s | PP corner speed |
 | lookahead_distance | 1.2 m | PP lookahead |
 
 ---
@@ -133,12 +147,11 @@ ros2 launch team_planning localization_mpp_pp_launch.py waypoints_csv:=/home/tea
 | --- | --- | --- |
 | centerline_follower | team_planning | Map-free reactive planner, extracts local track centerline from each LiDAR scan |
 | pure_pursuit | team_planning | Pure Pursuit with curvature-adaptive speed scaling |
-| ftg | team_planning | Follow-The-Gap reactive obstacle avoidance |
+| ftg | team_planning | Follow-The-Gap reactive obstacle avoidance with direction lock and danger snap steer |
 | mpp | team_planning | Model Predictive Planner, local horizon from global waypoints (legacy) |
 | record_waypoints | team_planning | Waypoint recorder with auto loop-closure detection (legacy) |
 | noise_proxy | team_planning | Sensor noise injection for robustness testing |
-| drive_mux | team_control | Switches between PP and FTG based on /control_mode |
-| safety_supervisor | team_control | Publishes control mode based on front obstacle distance |
+| drive_arbiter | team_control | Continuous PP/FTG blend with speed-dependent output smoothing and danger bypass |
 | keyboard_teleop | team_control | Manual keyboard control |
 
 ---
