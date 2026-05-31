@@ -149,7 +149,7 @@ class FollowTheGap(Node):
                     right_mask = a < -front_angle
                     left_max = float(np.max(r[left_mask])) if np.any(left_mask) else 0.0
                     right_max = float(np.max(r[right_mask])) if np.any(right_mask) else 0.0
-                    if left_max >= right_max:
+                    if left_max + 0.1 >= right_max:  # 0.1m left bias tiebreaker
                         desired_steer = self.max_steer
                     else:
                         desired_steer = -self.max_steer
