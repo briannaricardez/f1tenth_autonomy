@@ -131,7 +131,7 @@ def generate_launch_description():
             'min_range': 0.15,
             'steer_slew_rate': 5.0,
             'front_danger_dist': 0.8,
-            'front_danger_angle_deg': 30.0,
+            'front_danger_angle_deg': 15.0,
             'local_path_topic': '/local_path',
             'use_path_bias': True,
             'path_lookahead_dist': 1.0,
