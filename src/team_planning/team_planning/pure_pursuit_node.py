@@ -31,7 +31,7 @@ class PurePursuit(Node):
         self.declare_parameter('loop_path', True)
 
         # Speed params
-        self.declare_parameter('max_speed', 2.5)
+        self.declare_parameter('max_speed', 4.0)
         self.declare_parameter('min_speed', 0.8)
         self.declare_parameter('curvature_lookahead_points', 8)
 

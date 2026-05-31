@@ -112,6 +112,7 @@ class FollowTheGap(Node):
         idx = np.where(open_mask)[0]
         splits = np.where(np.diff(idx) > 1)[0] + 1
         groups = np.split(idx, splits)
+
         best_score = -float('inf')
         best_angle = None
         for grp in groups:
@@ -119,9 +120,8 @@ class FollowTheGap(Node):
                 continue
             grp_size_rad = float(a[grp[-1]] - a[grp[0]])
             grp_max_range = float(np.max(r_bubbled[grp]))
-            grp_center_local = int(np.argmax(r_bubbled[grp]))
-            grp_center_idx = int(grp[grp_center_local])
-            grp_center_angle = float(a[grp_center_idx])
+            # Angular midpoint of gap opening
+            grp_center_angle = float((a[grp[0]] + a[grp[-1]]) / 2.0)
             score = (self.gap_size_weight * grp_size_rad
                      + self.gap_range_weight * grp_max_range)
             if path_fresh:
@@ -139,34 +139,47 @@ class FollowTheGap(Node):
         angles = msg.angle_min + np.arange(len(ranges), dtype=np.float32) * msg.angle_increment
         fov = math.radians(self.fov_deg) / 2.0
         mask = (angles >= -fov) & (angles <= fov)
-        r = ranges[mask]
+        r_raw = ranges[mask]   # raw — used for danger detection so narrow obstacles aren't smoothed away
         a = angles[mask]
-        if r.size < 10:
+        if r_raw.size < 10:
             return
+
+        # Smooth only for gap finding, not for danger detection
         if self.smooth_window > 1:
             w = self.smooth_window
             kernel = np.ones(w, dtype=np.float32) / w
-            r = np.convolve(r, kernel, mode='same')
+            r = np.convolve(r_raw, kernel, mode='same')
+        else:
+            r = r_raw.copy()
 
         front_angle = math.radians(self.front_danger_angle_deg)
         front_mask = np.abs(a) <= front_angle
-        front_ranges = r[front_mask]
+        front_ranges = r_raw[front_mask]   # raw so narrow obstacles aren't diluted
 
         if front_ranges.size > 0:
             min_front = float(np.min(front_ranges))
             if min_front < self.front_danger_dist:
                 path_fresh = self.use_path_bias and self._path_is_fresh()
-                r_danger = r.copy()
-                r_danger[front_mask] = self.min_range
-                closest_idx = int(np.argmin(r))
-                bubble = int(self.bubble_radius / max(
-                    msg.angle_increment * max(float(r[closest_idx]), 0.1), 1e-3))
-                start = max(0, closest_idx - bubble)
-                end = min(r_danger.size - 1, closest_idx + bubble)
-                r_danger[start:end + 1] = self.min_range
-                target_angle = self._find_best_gap_target(r, a, r_danger, path_fresh)
-                desired_steer = clamp(target_angle, -self.max_steer, self.max_steer)
-                speed = self.min_speed
+
+                # Simple left vs right: measure average open space on each side
+                # outside the danger cone and pick whichever is larger.
+                left_mask = a > front_angle
+                right_mask = a < -front_angle
+                left_space = float(np.mean(r_raw[left_mask])) if np.any(left_mask) else 0.0
+                right_space = float(np.mean(r_raw[right_mask])) if np.any(right_mask) else 0.0
+
+                # Add path directional nudge on top of space comparison
+                if path_fresh:
+                    left_space += self.path_bias_weight * max(self.path_target_angle, 0.0)
+                    right_space += self.path_bias_weight * max(-self.path_target_angle, 0.0)
+
+                if left_space >= right_space:
+                    desired_steer = self.max_steer
+                    dir_label = 'LEFT'
+                else:
+                    desired_steer = -self.max_steer
+                    dir_label = 'RIGHT'
+
                 now = self.get_clock().now()
                 dt = (now - self.last_time).nanoseconds * 1e-9
                 if dt <= 0.0:
@@ -178,18 +191,18 @@ class FollowTheGap(Node):
                 out = AckermannDriveStamped()
                 out.header.stamp = now.to_msg()
                 out.drive.steering_angle = float(steer)
-                out.drive.speed = float(speed)
+                out.drive.speed = float(speed) if False else float(self.min_speed)
                 self.pub.publish(out)
-                dir_label = 'LEFT' if desired_steer > 0 else 'RIGHT'
                 self.get_logger().warn(
-                    f'FRONT DANGER: {min_front:.2f}m | steering {dir_label} '
-                    f'({desired_steer:+.2f} rad)',
+                    f'FRONT DANGER: {min_front:.2f}m | L={left_space:.2f} R={right_space:.2f} '
+                    f'| path_angle={self.path_target_angle if path_fresh else "stale"} '
+                    f'| steering {dir_label} ({desired_steer:+.2f} rad)',
                     throttle_duration_sec=0.5
                 )
                 return
 
-        closest_idx = int(np.argmin(r))
-        closest_dist = float(r[closest_idx])
+        closest_idx = int(np.argmin(r_raw))
+        closest_dist = float(r_raw[closest_idx])
         bubble = int(self.bubble_radius / max(
             msg.angle_increment * max(closest_dist, 0.1), 1e-3))
         start = max(0, closest_idx - bubble)

@@ -56,7 +56,7 @@ class DriveArbiter(Node):
         self.declare_parameter('alpha_smooth_beta', 0.4)
 
         # Speed shaping
-        self.declare_parameter('max_speed', 2.0)
+        self.declare_parameter('max_speed', 4.0)
         self.declare_parameter('emergency_speed', 0.4)
 
         # Output smoothing (speed-dependent)
@@ -64,7 +64,7 @@ class DriveArbiter(Node):
         self.declare_parameter('beta_high', 0.7)
         self.declare_parameter('slew_low', 2.5)
         self.declare_parameter('slew_high', 6.0)
-        self.declare_parameter('v_ref', 2.0)
+        self.declare_parameter('v_ref', 4.0)
 
         self.pp_topic = self.get_parameter('pp_topic').value
         self.ftg_topic = self.get_parameter('ftg_topic').value
@@ -110,6 +110,7 @@ class DriveArbiter(Node):
         self.scan_sub = self.create_subscription(
             LaserScan, self.scan_topic, self.scan_cb, 10)
 
+        self.start_time = self.get_clock().now()
         self.timer = self.create_timer(1.0 / self.arbiter_rate, self.tick)
 
         self.get_logger().info(
@@ -162,6 +163,8 @@ class DriveArbiter(Node):
 
     def tick(self):
         now = self.get_clock().now()
+        if (now - self.start_time).nanoseconds * 1e-9 < 1.5:
+            return  # startup lockout
         dt = (now - self.prev_tick_time).nanoseconds * 1e-9
         if dt <= 0.0:
             dt = 1.0 / self.arbiter_rate
