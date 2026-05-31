@@ -199,7 +199,6 @@ class CenterlineFollower(Node):
         line.pose.orientation.w = 1.0
 
         for x, y in pts:
-            from geometry_msgs.msg import Point
             pt = Point()
             pt.x = float(x)
             pt.y = float(y)
