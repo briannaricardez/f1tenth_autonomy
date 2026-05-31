@@ -144,12 +144,24 @@ class FollowTheGap(Node):
                         self.front_danger_gain * self.path_target_angle,
                         -self.max_steer, self.max_steer
                     )
+                    # If path steer is too small (path pointing at obstacle),
+                    # fall back to pure gap comparison — pick the side with
+                    # more clearance, no arbitrary direction bias
+                    if abs(desired_steer) < 0.15:
+                        left_mask = a > front_angle
+                        right_mask = a < -front_angle
+                        left_max = float(np.max(r[left_mask])) if np.any(left_mask) else 0.0
+                        right_max = float(np.max(r[right_mask])) if np.any(right_mask) else 0.0
+                        if left_max >= right_max:
+                            desired_steer = self.max_steer
+                        else:
+                            desired_steer = -self.max_steer
                 else:
                     left_mask = a > front_angle
                     right_mask = a < -front_angle
                     left_max = float(np.max(r[left_mask])) if np.any(left_mask) else 0.0
                     right_max = float(np.max(r[right_mask])) if np.any(right_mask) else 0.0
-                    if left_max + 0.1 >= right_max:  # 0.1m left bias tiebreaker
+                    if left_max >= right_max:
                         desired_steer = self.max_steer
                     else:
                         desired_steer = -self.max_steer
