@@ -34,9 +34,10 @@ LiDAR Scan
 ## TF Tree
 
 ```
-ego_racecar/odom
-    └─> ego_racecar/base_link   (published by vesc_to_odom)
-              └─> ego_racecar/laser  (static identity)
+map
+    └─> ego_racecar/odom        (static identity, no SLAM)
+              └─> ego_racecar/base_link   (published by vesc_to_odom)
+                        └─> ego_racecar/laser  (static identity)
 ```
 
 Pure Pursuit runs with map_frame = base_frame = ego_racecar/base_link so all path following is in the car's local frame. No localization required.
