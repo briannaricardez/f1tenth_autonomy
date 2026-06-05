@@ -14,9 +14,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('team_planning')
-    default_vesc_params = os.path.expanduser(
-        '~/f1tenth_autonomy/src/vesc/vesc_driver/params/vesc_config.yaml'
-    )
+    default_vesc_params = '/home/team2/f1tenth_autonomy/src/vesc/vesc_driver/params/vesc_config.yaml'
     default_urg_params = os.path.join(pkg_share, 'config', 'urg_node_params.yaml')
 
     vesc_driver = Node(
@@ -84,7 +82,7 @@ def generate_launch_description():
             'local_path_topic': '/local_path',
             'output_frame': 'ego_racecar/base_link',
             'forward_fov_deg': 180.0,
-            'lookahead_samples': [0.3, 0.6, 0.9, 1.2, 1.5],
+            'lookahead_samples': [0.4, 0.8, 1.2, 1.6, 2.0, 2.5, 3.0],
             'slab_half_width': 0.15,
             'range_min': 0.15,
             'range_max': 10.0,

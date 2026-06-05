@@ -191,7 +191,7 @@ class FollowTheGap(Node):
                 out = AckermannDriveStamped()
                 out.header.stamp = now.to_msg()
                 out.drive.steering_angle = float(steer)
-                out.drive.speed = float(speed) if False else float(self.min_speed)
+                out.drive.speed = float(self.min_speed)
                 self.pub.publish(out)
                 self.get_logger().warn(
                     f'FRONT DANGER: {min_front:.2f}m | L={left_space:.2f} R={right_space:.2f} '

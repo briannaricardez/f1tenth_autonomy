@@ -55,6 +55,7 @@ class PurePursuit(Node):
         self.max_speed           = float(self.get_parameter('max_speed').value)
         self.min_speed           = float(self.get_parameter('min_speed').value)
         self.curv_lookahead_pts  = int(self.get_parameter('curvature_lookahead_points').value)
+        self.curvature_scale     = float(self.get_parameter('curvature_scale').value)
 
         self.use_local_path_topic = bool(self.get_parameter('use_local_path_topic').value)
         self.local_path_topic     = self.get_parameter('local_path_topic').value
@@ -227,7 +228,7 @@ class PurePursuit(Node):
         return max_curvature
 
     def curvature_to_speed(self, curvature: float) -> float:
-        curvature_scale = self.get_parameter('curvature_scale').value
+        curvature_scale = self.curvature_scale
         t = min(max(curvature - 0.05, 0.0) / curvature_scale, 1.0)
         t_smooth = t * t
         speed = self.max_speed - t_smooth * (self.max_speed - self.min_speed)
