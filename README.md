@@ -33,7 +33,6 @@ LiDAR Scan
 
 ## TF Tree
 
-map -> ego_racecar/odom (static identity, no SLAM)
 ```
 ego_racecar/odom
     └─> ego_racecar/base_link   (published by vesc_to_odom)
