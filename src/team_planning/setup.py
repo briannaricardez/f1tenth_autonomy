@@ -27,11 +27,8 @@ setup(
         'console_scripts': [
             'ftg = team_planning.ftg_node:main',
             'pure_pursuit = team_planning.pure_pursuit_node:main',
-            'mpp = team_planning.mpp_node:main',
             'centerline_follower = team_planning.centerline_follower_node:main',
-            'record_waypoints = team_planning.record_waypoints:main',
             'noise_proxy = team_planning.noise_proxy:main',
-            'auto_map_saver = team_planning.auto_map_saver:main',
         ],
     },
 )
