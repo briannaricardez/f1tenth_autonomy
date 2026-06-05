@@ -141,11 +141,18 @@ class CenterlineFollower(Node):
             y_left  = float(np.max(ys_slab))
             y_right = float(np.min(ys_slab))
 
-            if y_left <= 0.0 or y_right >= 0.0:
+            # Use whatever walls we can see; don't require both sides
+            if y_left > 0.0 and y_right < 0.0:
+                lateral = 0.5 * (y_left + y_right)
+            elif y_left > 0.0:
+                # Only left wall visible - stay 0.5m right of it
+                lateral = y_left - 0.5
+            elif y_right < 0.0:
+                # Only right wall visible - stay 0.5m left of it
+                lateral = y_right + 0.5
+            else:
                 pts.append((d, last_lateral))
                 continue
-
-            lateral = 0.5 * (y_left + y_right)
             lateral = max(-self.max_lateral_offset,
                           min(self.max_lateral_offset, lateral))
             pts.append((d, lateral))

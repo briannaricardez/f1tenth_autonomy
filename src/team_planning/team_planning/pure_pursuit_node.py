@@ -34,6 +34,7 @@ class PurePursuit(Node):
         self.declare_parameter('max_speed', 4.0)
         self.declare_parameter('min_speed', 0.8)
         self.declare_parameter('curvature_lookahead_points', 8)
+        self.declare_parameter('curvature_scale', 1.5)
 
         # Local path support from MPP
         self.declare_parameter('use_local_path_topic', False)
@@ -226,7 +227,7 @@ class PurePursuit(Node):
         return max_curvature
 
     def curvature_to_speed(self, curvature: float) -> float:
-        curvature_scale = 0.8
+        curvature_scale = self.get_parameter('curvature_scale').value
         t = min(max(curvature - 0.05, 0.0) / curvature_scale, 1.0)
         t_smooth = t * t
         speed = self.max_speed - t_smooth * (self.max_speed - self.min_speed)
