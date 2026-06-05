@@ -73,6 +73,7 @@ class FollowTheGap(Node):
         self.last_time = self.get_clock().now()
         self.path_target_angle = None
         self.path_stamp = None
+        self.last_danger_dir = None  # hysteresis: remember last chosen side
 
         self.get_logger().info(
             f"FTG running | scan={self.scan_topic} drive={self.drive_topic} "
@@ -168,12 +169,31 @@ class FollowTheGap(Node):
                 left_space = float(np.mean(r_raw[left_mask])) if np.any(left_mask) else 0.0
                 right_space = float(np.mean(r_raw[right_mask])) if np.any(right_mask) else 0.0
 
-                # Add path directional nudge on top of space comparison
-                if path_fresh:
+                # Option 2: use 25th percentile instead of mean for conservative clearance
+                left_space = float(np.percentile(r_raw[left_mask], 25)) if np.any(left_mask) else 0.0
+                right_space = float(np.percentile(r_raw[right_mask], 25)) if np.any(right_mask) else 0.0
+
+                # Option 1: path bias tiebreaker when sides are close
+                if path_fresh and abs(left_space - right_space) < 0.3:
                     left_space += self.path_bias_weight * max(self.path_target_angle, 0.0)
                     right_space += self.path_bias_weight * max(-self.path_target_angle, 0.0)
 
-                if left_space >= right_space:
+                # Option 3: hysteresis — only switch sides if other side is clearly better (20% margin)
+                if self.last_danger_dir == 'LEFT' and left_space > 0.0:
+                    if right_space > left_space * 1.2:
+                        chosen_dir = 'RIGHT'
+                    else:
+                        chosen_dir = 'LEFT'
+                elif self.last_danger_dir == 'RIGHT' and right_space > 0.0:
+                    if left_space > right_space * 1.2:
+                        chosen_dir = 'LEFT'
+                    else:
+                        chosen_dir = 'RIGHT'
+                else:
+                    chosen_dir = 'LEFT' if left_space >= right_space else 'RIGHT'
+
+                self.last_danger_dir = chosen_dir
+                if chosen_dir == 'LEFT':
                     desired_steer = self.max_steer
                     dir_label = 'LEFT'
                 else:
