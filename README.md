@@ -12,23 +12,33 @@ This project supports both:
 
 ## Stack Architecture
 
-LiDAR Scan -> Centerline Follower (rolling local path from wall midpoints)
-                        |
-          Pure Pursuit (Primary Controller) curvature-adaptive speed 0.8-4.0 m/s
-                        |
-          Follow-The-Gap (Safety Fallback) reactive avoidance 0.5-2.5 m/s
-                        |
-          Drive Arbiter (continuous PP/FTG blend, danger lock at alpha>=0.85)
-                        |
-                     /drive
+```
+LiDAR Scan
+    └─> Centerline Follower     (rolling local path from wall midpoints)
+              │
+              ▼
+        Pure Pursuit             (primary controller, 0.8–4.0 m/s)
+              │
+              ▼
+        Follow-The-Gap           (safety fallback, 0.5–2.5 m/s)
+              │
+              ▼
+        Drive Arbiter            (continuous PP/FTG blend)
+              │
+              ▼
+           /drive
+````
 
 ---
 
 ## TF Tree
 
 map -> ego_racecar/odom (static identity, no SLAM)
-ego_racecar/odom -> ego_racecar/base_link (published by vesc_to_odom)
-ego_racecar/base_link -> ego_racecar/laser (static identity)
+```
+ego_racecar/odom
+    └─> ego_racecar/base_link   (published by vesc_to_odom)
+              └─> ego_racecar/laser  (static identity)
+```
 
 Pure Pursuit runs with map_frame = base_frame = ego_racecar/base_link so all path following is in the car's local frame. No localization required.
 
